@@ -1,0 +1,61 @@
+body {
+  color: #24292f;
+  font-family: Arial, sans;
+}
+
+a {
+  text-decoration: none;
+  color: #0a66c2;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code {
+  font-family: mono;
+  background-color: #eee;
+  padding: 3px;
+}
+
+code span.co {
+  color: #888;
+}
+
+code span.st, span.dv, span.fl, span.bn {
+  color: #5b8ab9;
+}
+
+code span.ch, span.dt {
+  color: red;
+}
+
+code span.cf, span.im {
+  color: green;
+}
+
+pre {
+  margin-left: 20px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+pre::before {
+  background-color: #0a84ff;
+  content: " ";
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  display: block;
+}
+
+pre code {
+  display: flex;
+  flex-direction: column;
+}
+
+h3 {
+  margin-top: 2rem;
+}
