@@ -9,9 +9,11 @@ Properties of *casper*:
 
 * a pure functional language, inspired by [Haskell](https://www.haskell.org/)
 * a focus on simplicity, with a minimal number of language concepts
-* pattern matching instead of typing
+* `;` and `=` are operators
+* pattern matching instead of traditional typing
 * dynamic dispatch, allowing OOP-style patterns without explicit language support
-* whitespace and indentations are significant, allowing very readable nested declarations
+* indents are only significant for statements (function defintions and `import`)
+* JSON is valid syntax
 
 This page acts as a reference document for the concrete compiler implementation (wip).
 
@@ -38,13 +40,13 @@ main = echo "Hello world"
 
 Here `main` is a function which takes no arguments.
 
-Note that the `echo` function actually returns an `IO` object, which acts as a list of OS actions.
+Note that the `echo` function actually returns an `IO` object, which acts as an OS action.
 
 ### 2. Strings
 
 #### Literals
 
-Literal strings are denoted by `"..."` (double quotes). Single quotes and backticks aren't used for literal strings (but are instead available as operators).
+Literal strings are denoted by `"..."` (double quotes). Single quotes and backticks aren't used for literal strings (and could be made available as operators).
 
 Literal strings support expression substitution. Stringable expressions can be inserted into a literal string using `${...}`.
 
@@ -55,8 +57,6 @@ The `\` character is used for escaping:
 * the `\` character itself
 * the `$` character
 * the `"` character
-
-Note that `\` is generally not available as an operator outside literal strings.
 
 #### String operations
 
@@ -97,7 +97,7 @@ toString [104,101,108,108,111,32,119,111,114,108,100] # "hello world"
 
 #### Integers
 
-`Int` represents an underlying 32-bit signed integer.
+`Int` represents an underlying 64-bit signed integer.
 
 Literal integers can be written as follows:
 ```python
@@ -153,7 +153,7 @@ Concatenation:
 
 Reduction:
 ```python
-foldl \(_+_) 0 [1,2,3,4] # sum==10
+fold \($+$) 0 [1,2,3,4] # sum==10
 ```
 
 Indexing:
@@ -164,7 +164,12 @@ Indexing:
 
 Map:
 ```python
-map \(_*2) [1,2,3,4] # [2,4,6,8]
+map \($*2) [1,2,3,4] # [2,4,6,8]
+```
+
+Sorting:
+```python
+sort \($<$) [3,2,4,1] # [1,2,3,4]
 ```
 
 ### 6. Dicts
@@ -192,23 +197,10 @@ Merging:
 
 ### 7. Branching
 
-There is a builtin `ifelse` function. It's first argument is a `Bool` value, it's second argument is a value returned upon a `True` condition, it's last argument is the else condition value. If there are more than 3 arguments, the third argument is the `Bool` value of the first `elif` block, etc.
-
-Because using the `ifelse` function directly can become unreadable, *casper* provides `if`, `elif` and `else` keywords as a special operator with very low precedence:
+There is a builtin `if` function. It's first argument is a `Bool` value, it's second argument is a value returned upon a `True` condition, it's last argument is the else condition value:
 ```python
-max a b c = if a>b && a>c  a elif b>c  b else c
-#
-# alternative formatting:
-max a b c =
-  if   a>b && a>c
-    a
-  elif b>c
-    b
-  else # the else block must always exist
-    c
+max a b = if (a>b) a b
 ```
-
-This is syntactic sugar for `ifelse (a>b&&a>c) a (b>c) b c`.
 
 ### 8. Functions
 
@@ -242,26 +234,19 @@ main =
   echo "hello world"
 ```
 
+The function defintion body ends when all groups are matched and the indent-level of the next line is the same as the indent-level of the function header.
+
 #### Chained expressions
 
-Multiple indented expressions are chained together using the `;` operator. Semicolons are automatically inserted where newlines are encountered between expressions of the same indent level, except after binary operators.
+Multiple indented expressions are chained together using the `;` operator:
 ```python
 main =
   # syntactic sugar for (echo "message 1\n"; echo "message 2\n"):
-  echo "message 1\n"
-  echo "message 2\n" 
+  echo "message 1\n";
+  echo "message 2\n";  # final semicolon is optional (ignored by compiler)
 ```
 
-Note that a semicolon wouldn't have been inserted in the following 2 cases:
-```python
-main = echo "message 1"
-  echo "message 2"
-```
-```python
-main = echo "message 1" echo "message 2"
-```
-
-In these 2 cases you would actually be calling `echo String IO`.
+Note there is no [automatic semicolon insertion](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#automatic_semicolon_insertion) in *casper* ([read more](#whitespace-discussion))
 
 #### Assignment expression
 
@@ -269,33 +254,24 @@ Consider the following simple program:
 ```python
 # greeter program
 main =
-  echo "what is your name?"
-  name = read
-  echo "hello " + name
-```
-
-First the parser inserts semicolons:
-```python
-# greeter program
-main =
   echo "what is your name?";
-  name = read;
+  name = readLine;
   echo "hello " + name
 ```
 
 The `=` symbol is treated as a ternary operator at the same precedence level as the `;` symbol. Both are right-to-left assiociative. So this simple program is actually syntactic sugar for:
 ```python
 # pseudo code!
-(echo "what is your name?"); (= (read) \(name = _; echo "hello " + name)) 
+(echo "what is your name?"); (= (readLine) \(name = $; echo "hello " + name)) 
 ```
 
-Note that the `read` function is an asynchronous OS function that calls a callback upon completion. `read`'s callback is everything following the assignment expression.
+Note that the `readLine` function is an asynchronous OS function that calls a callback upon completion. `readLine`'s callback is everything following the assignment expression.
 
 Now take a look at this example:
 ```python
 calcDistance x0::Float y0::Float x1::Float y1::Float = 
-  dx = x1 - x0
-  dy = y1 - y0
+  dx = x1 - x0;
+  dy = y1 - y0;
   sqrt dx*dx + dy*dy
 ```
 
@@ -303,7 +279,7 @@ There is no IO, but we are using intermediate variables for better readability/D
 ```python
 calcDistance x0::Float y0::Float x1::Float y1::Float =
   # pseudo code!
-  (= (x1 - x0) \(dx = _; = (y1 - y0) \(dy = _; sqrt dx*dx+dy*dy))) 
+  (= (x1 - x0) \(dx = $; = (y1 - y0) \(dy = $; sqrt dx*dx+dy*dy))) 
 ```
 
 The `=` operator here is simply defined as:
@@ -313,16 +289,16 @@ The `=` operator here is simply defined as:
 
 #### Anonymous functions
 
-You might've noticed anonymous functions several times above. They are denoted by `\(...)`, and contain `_`'s where arguments are substituted.
+You might've noticed anonymous functions several times above. They are denoted by `\(...)`, and contain `$`'s where arguments are substituted.
 
 An anonymous function that adds two numbers, concatenates two strings/lists, merges two dicts, etc.:
 ```
-\(_ + _)
+\($ + $)
 ```
 
-Using an assignment expression and a tuple destructuring pattern, this can look like an anonymous function in a more conventional language:
+The arguments can be numbered:
 ```
-\([a,b] = [_,_]; a+b)
+\($1+$2) # all (or none) must be numbered
 ```
 
 Because the types of the arguments of an anonymous function are unknown, nested pattern-matching of an anonymous function's arguments isn't possible. We can only pattern-match the number of arguments. `\1` matches an anonymous function that takes 1 argument, `\2` matches 2 arguments, etc. There is no `\0` anonymous function and there is no pattern for an arbitrary number of arguments.
@@ -382,14 +358,24 @@ Stringable = Any
 show Stringable = panic "not yet implemented"
 ```
 
-If you would like your type to *implement* from multiple *interfaces* then the builtin `&` operator can be used:
-```python
-MyType = Number & Stringable
-```
+*Implementing* multiple interfaces isn't (yet) possible as the needed type-union operator could be abused and result in unclear function dispatching (see [diamond problem](https://en.wikipedia.org/wiki/Multiple_inheritance)).
 
-Values that match `MyType` will also match `Number` and `Stringable`. Think of `&` as a union operator.
+### 10. IO
 
-### 10. Pattern-matching
+`IO` actions are usually client-server style queries, which might be performed asynchronously. The result of an `IO` function call is unwrapped using the `=` operator. The result can be an `Error`, `Ok`, void, or some non-error data.
+
+`File` and `Dir`, both inheriting from `Path`, are wrappers for `String` that dispatch filesystem-specific functions.
+
+Overview of builtin `IO` functions:
+
+* `echo`, print to stdout, returns `IO <void>`
+* `readLine`, read a single line from the terminal stdin, returns `IO String`
+* `readArgs`, returns a list of command-line arguments, including the name of the script (but not the name of the parser), returns `IO ([] String)`
+* `read File`, returns `IO (Error String)` or `IO String`
+* `write File`, returns `IO (Error String)` or `IO Ok`
+* `send (HttpReq method::String url::String payload::String)`, performs an http request, returns `IO (Error String)` if the status isn't 200 or timeout etc., or `IO data::String`
+
+### 11. Pattern-matching
 
 Pattern-matching is a powerful alternative to overloading functions based on argument types.
 
@@ -405,7 +391,10 @@ Named pattern-matching can be nested (which is called *destructuring*):
 # [a,b] and [c,d] are destructured tuples
 dot [a,b] [c,d] = a*c + b*d 
 #
-echo show dot [1,2] [3,4]   # 11
+echo (show (dot [1,2] [3,4]))   # 11
+#
+# with piping
+dot [1,2] [3,4] | show | echo   # 11
 ```
 
 The `_` name acts as sink and doesn't create a variable:
@@ -451,10 +440,11 @@ Card Int Suit = Any
 
 # return the winning card
 max trump::Suit a::(Card ia sa) b::(Card ib sb) =
-  if sb == sa
-    if (ib > ia)     b else a
-  else
-    if (sb == trump) b else a
+  if (sb == sa) (
+    if (ib > ia) b a
+  ) ( # else
+    if (sb == trump) b a
+  )
 ```
 
 #### Container pattern-matching
@@ -485,7 +475,7 @@ Note that the parentheses can only be used for argument/parameter matching and c
 Destructuring can be used inside list or dict pattern-matches:
 ```python
 # the pattern-matching turns a and b into lists
-flatten ([] (Pair a b)) = foldl \(_+_) [] (zip a b)
+flatten ([] (Pair a b)) = fold \($+$) [] (zip a b)
 ```
 
 The content of tuples, or dicts with known entries, can also be destructured:
@@ -497,7 +487,7 @@ price {qty: _, price: price} = price
 
 Note that all lists can be treated as tuples.
 
-### 11. Multiple dispatch
+### 12. Multiple dispatch
 
 Non-constructor functions can be defined multiple times with different arguments. The function that is eventually dispatched depends on the following:
 
@@ -517,7 +507,7 @@ Vec2 a::Float b::Float = [a,b]
 mag (Vec2 a::Float b::Float) = sqrt a*a + b*b 
 #
 # would match (Vec2 1.0 1.0) with score [0,2,2]
-mag (Vec2 a b)             = sqrt a*a + b*b 
+mag (Vec2 a b)               = sqrt a*a + b*b 
 #
 # would match (Vec2 1.0 1.0) with score [1,0,0]
 mag [a::Float, b::Float]     = sqrt a*a + b*b 
@@ -525,7 +515,7 @@ mag [a::Float, b::Float]     = sqrt a*a + b*b
 
 Note that an ambiguity error would be thrown if the first version of `mag` wasn't defined.
 
-### 12. Modules
+### 13. Modules
 
 All source files in the same directory are part of the same module.
 
@@ -544,14 +534,18 @@ import "/<sub-module-relative-to-project-root>"
 
 Errors are thrown when modules try to import themselves, or when circular module dependencies are encountered.
 
+#### Module private functions
+
+Functions and constructors with a `_` prefix are never exported, and are private to a module.
+
 #### Importing external modules
 
-External modules are declared in a `package.json` file in the root of your project:
+External modules are declared in a `package.json` file in the project root:
 ```json
 {
   "dependencies": {
     "std": {
-      "version": "1.0.0",
+      "version": "0.1.2",
       "url"    : "github.com/openengineer/casperlang-stdlib"
     }
   }
@@ -563,8 +557,7 @@ In this example the *casper* standard library can be imported as follows:
 import "std"
 #
 main = 
-  println "number formatting is implemented in the std library"
-  printf  "eg: %.02f\n" 1.0
+  println "the std library contains many basic functions"
 ```
 
 Note that there is no namespacing mechanism, and libraries have to be designed carefully to avoid name-conflicts when being imported.
@@ -573,6 +566,39 @@ It is also possible to only access sub-modules of external modules:
 ```python
 import "std/css"
 #
+genStyleSheet = (
+  h = 4:rem;
+  CSS (
+    body (
+      nav (
+        flex "hsc";
+        h1 (lineHeight h; fontWeight "normal");
+
+        id "app-links" (
+          height h; flex "hsc";
+          a (
+            cursor "pointer";
+            hasAttr "active" (fontWeight "bold"; color "black"; hover (color "black"))
+          )
+        )
+      )
+    )
+  )
+)
+```
+
+### A. Discussion: significant whitespace inside expressions {#whitespace-discussion}
+
+Significant whitespace inside expressions could be implemented as *ASI* and automatic parenthesis insertion.
+
+This might allow getting rid of some ugly parentheses, but inlining chained expressions would be less apparent. And in some fringe cases it would be hard for the user to guess where semicolons and parentheses would be inserted.
+
+Significant whitespace doesn't seem to provide an overwhelming advantage for expressions, so that's why I've decided to make *casper* a mostly non-significant-whitespace language (indents are only significant for `import` statements and function bodies).
+
+For comparison I've written a version of the css example using significant whitespace inside expressions:
+```python
+import "std/css"
+# example with automatic semicolon and parentheses insertion
 genStyleSheet = 
   h = 4:rem
   CSS
@@ -598,7 +624,3 @@ genStyleSheet =
               hover
                 color "black"
 ```
-
-#### Module private functions
-
-Functions and constructors with a `_` prefix are never exported, and are private to a module.
